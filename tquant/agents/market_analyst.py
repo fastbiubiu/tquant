@@ -27,9 +27,9 @@ class MarketAnalyst:
         self.indicators_config = self.config.indicators.model_dump() if self.config.indicators else {}
         self.signals_config = {}
 
-    def connect(self, auth: str = None) -> bool:
-        """连接API"""
-        return self.tqsdk.connect(auth)
+    def connect(self, backtest: Optional[bool] = None, demo: Optional[bool] = None) -> bool:
+        """连接API（参数不填则完全使用配置文件中的 tqsdk 设置）"""
+        return self.tqsdk.connect(backtest=backtest, demo=demo)
 
     def analyze_symbol(self, symbol: str, kline_count: int = 100) -> Optional[TradingSignal]:
         """

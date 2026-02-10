@@ -3,6 +3,7 @@ Pydantic-based configuration schema for tquant.
 Provides type-safe configuration management with validation.
 """
 
+from datetime import date
 from pathlib import Path
 from typing import Optional, List
 
@@ -91,6 +92,17 @@ class TQSDKConfig(BaseModel):
     log_level: str = Field(default="INFO", description="Log level")
 
 
+class BacktestConfig(BaseModel):
+    """Backtest runtime configuration."""
+    start_date: date = Field(description="Backtest start date (YYYY-MM-DD)")
+    end_date: date = Field(description="Backtest end date (YYYY-MM-DD)")
+    initial_balance: float = Field(gt=0, default=1_000_000.0, description="Initial balance for backtest")
+    commission: float = Field(ge=0, default=0.0003, description="Commission rate")
+    slippage: float = Field(ge=0, default=0.001, description="Slippage rate")
+    refresh_interval: int = Field(gt=0, default=60, description="Backtest refresh interval in seconds")
+    enable_short: bool = Field(default=True, description="Allow short selling in backtest")
+
+
 class LoggingConfig(BaseModel):
     """Logging configuration."""
     level: str = Field(default="INFO", description="Log level")
@@ -115,6 +127,7 @@ class Config(BaseSettings):
     tqsdk: TQSDKConfig = Field(default_factory=TQSDKConfig)
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     system: SystemConfig = Field(default_factory=SystemConfig)
+    backtest: Optional[BacktestConfig] = Field(default=None, description="Backtest configuration")
 
     model_config = SettingsConfigDict(
         env_prefix="TQUANT_",

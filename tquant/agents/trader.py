@@ -6,7 +6,7 @@
 import logging
 import time
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 from tquant.config import get_config, Config
 from tquant.utils.signals import TradingSignal, SignalType
@@ -34,9 +34,9 @@ class Trader:
         self.stop_loss_ratio = self.config.trading.risk.stop_loss_ratio
         self.take_profit_ratio = self.config.trading.risk.take_profit_ratio
 
-    def connect(self, auth: str = None) -> bool:
-        """连接API"""
-        return self.tqsdk.connect(auth)
+    def connect(self, backtest: Optional[bool] = None, demo: Optional[bool] = None) -> bool:
+        """连接API（参数不填则完全使用配置文件中的 tqsdk 设置）"""
+        return self.tqsdk.connect(backtest=backtest, demo=demo)
 
     def execute_signal(self, signal: TradingSignal, account_info: Dict = None) -> Dict:
         """
