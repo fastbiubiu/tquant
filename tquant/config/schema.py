@@ -16,14 +16,9 @@ class TradingSymbols(BaseModel):
     symbols: List[str] = Field(default_factory=list, description="List of trading symbols")
 
 
-class AccountConfig(BaseModel):
-    """Account configuration."""
-    initial_balance: float = Field(gt=0, default=1000000.0, description="Initial account balance")
-    max_position_ratio: float = Field(ge=0, le=1, default=1.0, description="Maximum position ratio")
-
-
 class RiskConfig(BaseModel):
     """Risk management configuration."""
+    max_position_ratio: float = Field(ge=0, le=1, default=0.7, description="Maximum position ratio")
     max_loss_ratio: float = Field(ge=0, le=1, default=0.1, description="Maximum daily loss ratio")
     stop_loss_ratio: float = Field(ge=0, le=1, default=0.03, description="Stop loss ratio per trade")
     take_profit_ratio: float = Field(ge=0, le=1, default=0.06, description="Take profit ratio per trade")
@@ -32,7 +27,6 @@ class RiskConfig(BaseModel):
 class TradingConfig(BaseModel):
     """Trading configuration."""
     symbols: List[str] = Field(default_factory=list, description="Trading symbols")
-    account: AccountConfig = Field(default_factory=AccountConfig)
     risk: RiskConfig = Field(default_factory=RiskConfig)
 
 
@@ -84,23 +78,32 @@ class IndicatorsConfig(BaseModel):
     bollinger_bands: Optional[BollingerBandsConfig] = Field(default=None, description="Bollinger Bands configuration")
 
 
-class TQSDKConfig(BaseModel):
-    """TQSDK configuration."""
-    auth: str = Field(default="", description="Authentication credentials")
-    backtest: bool = Field(default=False, description="Enable backtest mode")
-    demo: bool = Field(default=True, description="Enable demo mode")
-    log_level: str = Field(default="INFO", description="Log level")
+class AuthenticationConfig(BaseModel):
+    """Authentication configuration."""
+    username: str = Field(default="", description="Username")
+    password: str = Field(default="", description="Password")
 
 
 class BacktestConfig(BaseModel):
-    """Backtest runtime configuration."""
+    """Backtest configuration."""
     start_date: date = Field(description="Backtest start date (YYYY-MM-DD)")
     end_date: date = Field(description="Backtest end date (YYYY-MM-DD)")
-    initial_balance: float = Field(gt=0, default=1_000_000.0, description="Initial balance for backtest")
-    commission: float = Field(ge=0, default=0.0003, description="Commission rate")
-    slippage: float = Field(ge=0, default=0.001, description="Slippage rate")
-    refresh_interval: int = Field(gt=0, default=60, description="Backtest refresh interval in seconds")
-    enable_short: bool = Field(default=True, description="Allow short selling in backtest")
+
+
+class AccountConfig(BaseModel):
+    """Account configuration."""
+    broker_id: str = Field(description="Initial account balance")
+    account_id: str = Field(description="Maximum position ratio")
+    password: str = Field(description="Maximum position ratio")
+
+
+class TQSDKConfig(BaseModel):
+    """TQSDK configuration."""
+    auth: AuthenticationConfig = Field(default_factory=AuthenticationConfig)
+    backtest: Optional[BacktestConfig] = Field(default=None)
+    account: Optional[AccountConfig] = Field(default=None)
+    symbol: str = Field(description="Initial account balance")
+    log_level: str = Field(default="INFO", description="Log level")
 
 
 class LoggingConfig(BaseModel):

@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 class Trader:
     """交易执行器Agent"""
 
-    def __init__(self, config_path: str = None):
+    def __init__(self,tqsdk: TqSdkInterface):
         """初始化交易器"""
         self.config: Config = get_config()
-        self.tqsdk = TqSdkInterface(config_path)
+        self.tqsdk = tqsdk
         self.positions = {}
         self.orders = {}
         self.trade_history = []
@@ -29,14 +29,14 @@ class Trader:
 
         # 交易配置
         self.symbols = self.config.trading.symbols
-        self.max_position_ratio = self.config.trading.account.max_position_ratio
+        self.max_position_ratio = self.config.trading.risk.max_position_ratio
         self.max_loss_ratio = self.config.trading.risk.max_loss_ratio
         self.stop_loss_ratio = self.config.trading.risk.stop_loss_ratio
         self.take_profit_ratio = self.config.trading.risk.take_profit_ratio
 
-    def connect(self, backtest: Optional[bool] = None, demo: Optional[bool] = None) -> bool:
+    def connect(self) -> bool:
         """连接API（参数不填则完全使用配置文件中的 tqsdk 设置）"""
-        return self.tqsdk.connect(backtest=backtest, demo=demo)
+        return self.tqsdk.connect()
 
     def execute_signal(self, signal: TradingSignal, account_info: Dict = None) -> Dict:
         """
@@ -45,6 +45,7 @@ class Trader:
         :param account_info: 账户信息
         :return: 执行结果
         """
+        self.tqsdk.api.get_account()
         try:
             result = {
                 'symbol': signal.symbol,

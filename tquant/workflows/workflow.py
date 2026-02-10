@@ -49,8 +49,8 @@ class TradingWorkflow:
             self.config = cfg
 
         # 初始化Agent
-        self.market_analyst = MarketAnalyst(config_path)
-        self.trader = Trader(config_path)
+        self.market_analyst = MarketAnalyst()
+        self.trader = Trader()
 
         # 创建工作流
         self.workflow = self._create_workflow()

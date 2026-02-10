@@ -28,11 +28,10 @@ def main():
 
         # Connect API before starting
         if ts.api:
-            success = ts.api.connect(demo=True)
+            success = ts.api.connect()
             if not success:
                 print("❌ 无法连接到 tqsdk API")
                 print("请配置 TQUANT_TQSDK_AUTH 环境变量或编辑 ~/.tquant/config.json")
-                print("格式: TQUANT_TQSDK_AUTH='account:password'")
                 print("注册地址: https://account.shinnytech.com/")
                 sys.exit(1)
         else:

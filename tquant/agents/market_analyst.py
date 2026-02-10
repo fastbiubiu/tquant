@@ -20,16 +20,24 @@ logger = logging.getLogger(__name__)
 class MarketAnalyst:
     """市场分析师Agent"""
 
-    def __init__(self, config_path: str = None):
+    def __init__(self,tqsdk: TqSdkInterface):
         """初始化分析师"""
         self.config: Config = get_config()
-        self.tqsdk = TqSdkInterface(config_path)
+        self.tqsdk = tqsdk
         self.indicators_config = self.config.indicators.model_dump() if self.config.indicators else {}
         self.signals_config = {}
 
+        # 统计信息
+        self._total_analyses: int = 0
+        self._analyzed_symbols: set[str] = set()
+        self.enable_llm: bool = bool(self.config.llm and (self.config.llm.gpt4o or self.config.llm.gpt4o_mini))
+
+        # 信号统计器（供 TradingSystem._print_statistics 使用）
+        self.signal_generator = _SignalStats()
+
     def connect(self, backtest: Optional[bool] = None, demo: Optional[bool] = None) -> bool:
         """连接API（参数不填则完全使用配置文件中的 tqsdk 设置）"""
-        return self.tqsdk.connect(backtest=backtest, demo=demo)
+        return self.tqsdk.connect()
 
     def analyze_symbol(self, symbol: str, kline_count: int = 100) -> Optional[TradingSignal]:
         """
@@ -40,7 +48,7 @@ class MarketAnalyst:
         """
         try:
             # 获取K线数据
-            kline_data = self.tqsdk.get_kline_data(symbol, count=kline_count)
+            kline_data = self.tqsdk.get_kline_data()
 
             if kline_data.empty:
                 logger.error(f"获取{symbol}的K线数据失败")
@@ -73,11 +81,63 @@ class MarketAnalyst:
             )
 
             logger.info(f"{symbol} 分析完成: {signal.signal_type.value} (信心度: {signal.confidence:.2f})")
+
+            # 更新统计信息
+            self._total_analyses += 1
+            self._analyzed_symbols.add(symbol)
+            self.signal_generator.record_signal(signal)
+
             return signal
 
         except Exception as e:
             logger.error(f"分析{symbol}时发生错误: {e}")
             return None
+
+    def get_analysis_statistics(self) -> Dict[str, Any]:
+        """提供 TradingSystem._print_statistics 所需的市场分析统计数据"""
+        return {
+            'total_analyses': self._total_analyses,
+            'analyzed_symbols_count': len(self._analyzed_symbols),
+            'enable_llm': self.enable_llm,
+        }
+
+
+class _SignalStats:
+    """简单的信号统计器, 供 TradingSystem._print_statistics 使用"""
+
+    def __init__(self) -> None:
+        self._total_signals = 0
+        self._buy_signals = 0
+        self._sell_signals = 0
+        self._hold_signals = 0
+        self._total_confidence = 0.0
+
+    def record_signal(self, signal: TradingSignal) -> None:
+        self._total_signals += 1
+        self._total_confidence += float(signal.confidence or 0.0)
+
+        if signal.signal_type in [SignalType.STRONG_BUY, SignalType.BUY]:
+            self._buy_signals += 1
+        elif signal.signal_type in [SignalType.STRONG_SELL, SignalType.SELL]:
+            self._sell_signals += 1
+        else:
+            self._hold_signals += 1
+
+    def get_signal_statistics(self) -> Dict[str, Any]:
+        total = self._total_signals or 1  # 避免除零
+        buy_ratio = self._buy_signals / total
+        sell_ratio = self._sell_signals / total
+        avg_confidence = self._total_confidence / total if self._total_signals > 0 else 0.0
+
+        return {
+            'total_signals': self._total_signals,
+            'buy_signals': self._buy_signals,
+            'sell_signals': self._sell_signals,
+            'hold_signals': self._hold_signals,
+            'buy_ratio': buy_ratio,
+            'sell_ratio': sell_ratio,
+            'avg_confidence': avg_confidence,
+        }
 
     def analyze_multiple_symbols(self, symbols: List[str], kline_count: int = 100) -> List[TradingSignal]:
         """
