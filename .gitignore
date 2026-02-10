@@ -65,7 +65,8 @@ venv.bak/
 # Project specific
 data/cache/*
 data/backtest/*
-logs/*.json
+data/experiments/*
+logs/*
 *.log
 config.local.yaml
 .claude/

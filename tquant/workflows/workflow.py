@@ -5,7 +5,7 @@
 
 import logging
 from datetime import datetime
-from typing import Dict, List, TypedDict, Optional
+from typing import Dict, List, TypedDict, Optional, Any
 
 from langgraph.graph import StateGraph, END
 
@@ -33,9 +33,20 @@ class TradingState(TypedDict):
 class TradingWorkflow:
     """量化交易工作流"""
 
-    def __init__(self, config_path: str = None):
-        """初始化工作流"""
-        self.config: Config = get_config()
+    def __init__(self, config: Optional[Dict[str, Any]] = None, config_path: str = None):
+        """初始化工作流
+
+        Args:
+            config: 可选的配置字典（用于测试或自定义配置）
+            config_path: 兼容参数，当前实现中不强制使用
+        """
+        if config is not None:
+            config_dict: Dict[str, Any] = config
+            # 当传入 dict 时，不再依赖全局 Config 对象
+            self.config = config_dict
+        else:
+            cfg: Config = get_config()
+            self.config = cfg
 
         # 初始化Agent
         self.market_analyst = MarketAnalyst(config_path)
@@ -49,8 +60,13 @@ class TradingWorkflow:
 
     def _init_state(self) -> TradingState:
         """初始化状态"""
+        trading_symbols = (
+            self.config.trading.symbols
+            if isinstance(self.config, Config)
+            else self.config.get('trading', {}).get('symbols', [])
+        )
         return {
-            'symbols': self.config.trading.symbols,
+            'symbols': trading_symbols,
             'current_symbol': None,
             'market_signals': [],
             'current_signal': None,
@@ -279,7 +295,12 @@ class TradingWorkflow:
 
         # 检查持仓数量
         position_count = risk_metrics.get('position_count', 0)
-        max_positions = self.config.get('risk', {}).get('max_positions', 5)
+        if isinstance(self.config, Config):
+            max_positions = getattr(getattr(self.config, "risk_management", {}), "risk", {}).get(
+                "position_concentration_limit", 5
+            )
+        else:
+            max_positions = self.config.get('risk', {}).get('max_positions', 5)
 
         if position_count > max_positions:
             state['messages'].append({

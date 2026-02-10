@@ -27,6 +27,8 @@ class MarketDataError(TradingError):
     """市场数据错误"""
     def __init__(self, message: str, symbol: str = None, details: Optional[Dict] = None):
         super().__init__(message, "MARKET_DATA_ERROR", {"symbol": symbol, **(details or {})})
+        # 兼容恢复逻辑中直接访问 error.symbol 的用法
+        self.symbol = symbol
 
 class APIConnectionError(TradingError):
     """API连接错误"""
@@ -37,6 +39,8 @@ class SignalGenerationError(TradingError):
     """信号生成错误"""
     def __init__(self, message: str, symbol: str = None, details: Optional[Dict] = None):
         super().__init__(message, "SIGNAL_GENERATION_ERROR", {"symbol": symbol, **(details or {})})
+        # 兼容恢复逻辑中直接访问 error.symbol 的用法
+        self.symbol = symbol
 
 class TradeExecutionError(TradingError):
     """交易执行错误"""
@@ -46,6 +50,9 @@ class TradeExecutionError(TradingError):
             "order_id": order_id,
             **(details or {})
         })
+        # 兼容恢复逻辑中直接访问属性
+        self.symbol = symbol
+        self.order_id = order_id
 
 class ConfigurationError(TradingError):
     """配置错误"""
@@ -111,7 +118,12 @@ class ErrorHandler:
         error_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
         # 增加错误计数
-        error_key = f"{error_type}_{error.__class__.__name__}"
+        # 优先使用错误代码作为 key 的一部分，便于单测和运维按错误码统计
+        error_code = getattr(error, "error_code", None)
+        if error_code and error_code != "UNKNOWN":
+            error_key = f"{error_type}_{error_code}"
+        else:
+            error_key = f"{error_type}_{error.__class__.__name__}"
         self.error_counts[error_key] = self.error_counts.get(error_key, 0) + 1
 
         # 添加到错误历史

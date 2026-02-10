@@ -338,15 +338,25 @@ API 统计:
         Returns:
             报告内容
         """
+        from pathlib import Path
+
+        # 默认写入 logs 目录，避免污染项目根目录
         if filename is None:
             filename = f"cost_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt"
 
         report = self.get_summary()
 
         try:
-            with open(filename, 'w') as f:
+            # 如果调用方只传了文件名，这里自动加上 logs/ 前缀
+            output_path = Path(filename)
+            if not output_path.is_absolute() and output_path.parent == Path('.'):
+                output_path = Path("logs") / output_path
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(report)
-            logger.info(f"成本报告已导出: {filename}")
+            logger.info(f"成本报告已导出: {output_path}")
         except Exception as e:
             logger.error(f"导出成本报告失败: {e}")
 

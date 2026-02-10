@@ -54,17 +54,24 @@ class ValidationResult:
 class SignalValidator:
     """信号验证器"""
 
-    def __init__(self):
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
         """
         初始化信号验证器
 
         Args:
-            config_path: 配置文件路径
+            config: 可选的配置字典（单元测试或自定义配置时使用）
         """
-        self.config: Config = get_config()
+        if config is not None:
+            config_dict: Dict[str, Any] = config
+        else:
+            try:
+                cfg: Config = get_config()
+                config_dict = cfg.model_dump()
+            except Exception:
+                config_dict = {}
 
         # 获取验证配置
-        self.validation_config = self.config.get('validation', {})
+        self.validation_config = config_dict.get('validation', {})
         self.enable_advanced_validation = self.validation_config.get('advanced', True)
         self.confirmation_threshold = self.validation_config.get('confirmation_threshold', 0.7)
 
@@ -128,7 +135,7 @@ class SignalValidator:
         ]
 
         # 从配置加载规则
-        config_rules = self.config.get('validation', {}).get('rules', [])
+        config_rules = self.validation_config.get('rules', [])
         if config_rules:
             rules = []
             for rule_config in config_rules:
@@ -162,7 +169,7 @@ class SignalValidator:
             'market_context': market_data or {}
         }
 
-        total_score = 0
+        total_score = 0.0
         valid_rules = 0
 
         # 应用验证规则
@@ -175,7 +182,7 @@ class SignalValidator:
 
             if rule_result['passed']:
                 total_score += rule_result['score'] * rule.weight
-                valid_rules += rule
+                valid_rules += 1
             else:
                 if rule_result['risk_level'] == 'high':
                     validation_details['risk_factors'].append(rule_result['message'])
@@ -199,7 +206,7 @@ class SignalValidator:
         suggested_action = self._get_suggested_action(status, confidence_score)
 
         # 创建验证结果
-        result = ValidationResult(
+        validation_result = ValidationResult(
             signal_id=signal_id,
             original_signal=signal,
             status=status,
@@ -211,11 +218,19 @@ class SignalValidator:
         )
 
         # 保存信号历史
-        self.signal_history[signal_id] = result
+        self.signal_history[signal_id] = validation_result
 
         logger.info(f"信号 {signal_id} 验证完成,状态: {status.value}, 置信度: {confidence_score:.3f}")
 
-        return result
+        # 对外新的单测 API 只要求返回 dict 或 bool，这里返回一个简化的 dict
+        return {
+            'signal_id': signal_id,
+            'status': status.value,
+            'confidence_score': confidence_score,
+            'risk_level': risk_level.value,
+            'suggested_action': suggested_action,
+            'validation_details': validation_details,
+        }
 
     def _apply_rule(self, signal: TradingSignal, rule: ValidationRule,
                    market_data: Optional[Dict]) -> Dict[str, Any]:
@@ -333,6 +348,10 @@ class SignalValidator:
         else:
             return 0.5  # 持有信号返回中性评分
 
+    # 新 API 的简单封装
+    def check_trend_consistency(self, signal: TradingSignal, market_data: Optional[Dict] = None) -> float:
+        return self._check_trend_consistency(signal, market_data)
+
     def _check_indicators_rationality(self, signal: TradingSignal) -> float:
         """检查技术指标的合理性"""
         if not signal.indicators:
@@ -371,6 +390,10 @@ class SignalValidator:
 
         return total_rationality / indicator_count if indicator_count > 0 else 0.5
 
+    def check_indicators_rationality(self, signal: TradingSignal) -> float:
+        """新 API 封装"""
+        return self._check_indicators_rationality(signal)
+
     def _check_historical_performance(self, signal: TradingSignal,
                                    historical_signals: Optional[List[TradingSignal]]) -> float:
         """检查历史表现"""
@@ -394,6 +417,12 @@ class SignalValidator:
 
         success_rate = successful_signals / len(same_symbol_signals)
         return success_rate
+
+    def get_historical_performance(self) -> Optional[Dict[str, Any]]:
+        """占位实现：返回 None 或简单统计"""
+        if not self.performance_stats:
+            return None
+        return self.performance_stats
 
     def _determine_signal_status(self, confidence_score: float,
                                 signal: TradingSignal,
@@ -432,6 +461,18 @@ class SignalValidator:
         else:
             return "需要进一步分析"
 
+    def get_suggested_action(self, signal: TradingSignal) -> str:
+        """基于当前信号置信度给出简单建议"""
+        # 这里不重跑完整验证，只用置信度做一个简单分类
+        if signal.confidence >= 0.8:
+            return "立即执行"
+        elif signal.confidence >= 0.6:
+            return "谨慎执行,建议补充分析"
+        elif signal.confidence >= 0.4:
+            return "观望,等待确认"
+        else:
+            return "拒绝执行"
+
     def batch_validate_signals(self, signals: List[TradingSignal],
                              market_data: Optional[Dict] = None,
                              historical_signals: Optional[List[TradingSignal]] = None) -> List[ValidationResult]:
@@ -452,8 +493,8 @@ class SignalValidator:
 
         for signal in signals:
             try:
-                result = self.validate_signal(signal, market_data, historical_signals)
-                results.append(result)
+                result_dict = self.validate_signal(signal, market_data, historical_signals)
+                results.append(result_dict)
             except Exception as e:
                 logger.error(f"验证信号失败: {e}")
                 # 创建失败结果
@@ -470,24 +511,36 @@ class SignalValidator:
                 results.append(result)
 
         # 按置信度排序
-        results.sort(key=lambda x: x.confidence_score, reverse=True)
+        results.sort(key=lambda x: x.get('confidence_score', 0.0), reverse=True)
 
-        logger.info(f"批量验证完成,有效信号: {len([r for r in results if r.status != SignalStatus.REJECTED])}")
+        logger.info(f"批量验证完成,有效信号: {len(results)}")
 
         return results
 
-    def get_validation_summary(self, results: List[ValidationResult]) -> Dict[str, Any]:
+    # 新的测试 API 期望的方法别名/包装
+    def batch_validate(self, signals: List[TradingSignal]) -> List[Dict[str, Any]]:
+        """兼容性包装：简化批量验证接口"""
+        return self.batch_validate_signals(signals)
+
+    def get_validation_summary(self, results: Optional[List[Any]] = None) -> Dict[str, Any]:
         """获取验证摘要"""
+        # 新的单测允许无参数调用，这里做兼容处理
+        if results is None:
+            results = list(self.signal_history.values())
         if not results:
             return {}
 
         total_signals = len(results)
-        confirmed_count = len([r for r in results if r.status == SignalStatus.CONFIRMED])
-        partial_count = len([r for r in results if r.status == SignalStatus.PARTIAL_CONFIRM])
-        uncertain_count = len([r for r in results if r.status == SignalStatus.UNCERTAIN])
-        rejected_count = len([r for r in results if r.status == SignalStatus.REJECTED])
+        confirmed_count = len([r for r in results if getattr(r, "status", getattr(r, "get", lambda *_: None)("status")) == SignalStatus.CONFIRMED])
+        partial_count = len([r for r in results if getattr(r, "status", getattr(r, "get", lambda *_: None)("status")) == SignalStatus.PARTIAL_CONFIRM])
+        uncertain_count = len([r for r in results if getattr(r, "status", getattr(r, "get", lambda *_: None)("status")) == SignalStatus.UNCERTAIN])
+        rejected_count = len([r for r in results if getattr(r, "status", getattr(r, "get", lambda *_: None)("status")) == SignalStatus.REJECTED])
 
-        avg_confidence = sum(r.confidence_score for r in results) / total_signals
+        # 兼容 dict/ValidationResult 两种结构
+        def _conf(r: Any) -> float:
+            return r.confidence_score if isinstance(r, ValidationResult) else r.get('confidence_score', 0.0)
+
+        avg_confidence = sum(_conf(r) for r in results) / total_signals
 
         # 按风险等级统计
         risk_stats = {level.value: 0 for level in RiskLevel}
@@ -543,6 +596,12 @@ class SignalValidator:
                 stats['accuracy'] = correct_predictions / len(stats['actual_results'])
 
             logger.info(f"更新信号 {signal_id} 性能统计,准确率: {stats['accuracy']:.3f}")
+
+    # 简化版性能跟踪 API，供新的单测使用
+    def track_performance(self, signal: TradingSignal, actual_result: float = 1.0):
+        """根据信号 ID 跟踪一次性能表现"""
+        signal_id = f"{signal.symbol}_{signal.timestamp.strftime('%Y%m%d_%H%M%S')}"
+        self.update_performance_stats(signal_id, actual_result)
 
     def get_performance_report(self) -> Dict[str, Any]:
         """获取性能报告"""

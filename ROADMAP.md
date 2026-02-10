@@ -400,33 +400,28 @@ class Debater:
 
 ---
 
-### 第五阶段：交易执行（第 7-8 周）✅ 已完成
+### 第五阶段：交易执行（第 7-8 周）✅ 核心功能已完成，集成优化进行中
 
 **目标**：实现交易执行
 
-**交付物**：
-- ✅ 报单系统 (`agents/trader.py`)
-- ✅ 监控系统 (`trading_monitor.py`)
-- ✅ 结果记录 (`result_recorder.py`)
-- ✅ 通知系统 (`notification_manager.py`)
-- ✅ 集成测试 (`test_phase5_integration.py`)
+**交付物（当前状态）**：
+- ✅ 报单系统 (`tquant/agents/trader.py`)
+- ✅ 监控/记录/通知相关核心模块（如 `tquant/utils/trading_monitor.py`、`result_recorder.py`、`notification_manager.py`）
+- ✅ 回测相关工具与测试（`tests/backtest/*`）
+- ✅ 大量单元测试（`tests/unit/*`）
+- ⏳ 端到端集成测试（规划中，可在 `tests/integration/` 增补）
 
-**完成情况**：
+**完成情况（客观现状）**：
 
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| 报单系统 | ✅ | 支持买入、卖出、平仓、风险管理 |
-| 监控系统 | ✅ | 实时监控、异常告警、日志记录 |
-| 结果记录 | ✅ | 交易记录、性能分析、数据导出 |
-| 通知系统 | ✅ | Telegram、微信、邮件通知 |
-| 集成测试 | ✅ | 19 个测试，100% 通过率 |
+| 功能       | 状态 | 说明                                                         |
+|------------|------|--------------------------------------------------------------|
+| 报单系统   | ✅   | 支持买入、卖出、做空、平仓及基础风险控制                     |
+| 监控系统   | ✅   | 已有监控/记录/通知模块，后续可按需要扩展具体渠道和告警策略   |
+| 结果记录   | ✅   | 交易记录与统计分析模块已实现                                 |
+| 通知系统   | ✅   | 通知模块骨架已存在，可按配置接入具体实现                     |
+| 集成测试   | ⏳   | 目前以单元测试和回测测试为主，建议补充端到端集成测试用例     |
 
-**关键指标**：
-- 测试覆盖率: 100%
-- 代码质量: 高
-- 文档完整度: 100%
-
-**详细文档**：见 `PHASE5_IMPLEMENTATION.md`
+> 说明：早期文档中提到的 `test_phase5_integration.py` 和“19 个测试、100% 通过率”等数字为规划目标，当前仓库中尚未以该命名落地集成测试文件，实际测试覆盖情况以 `tests/` 目录为准。
 
 **每日任务**：
 ```
@@ -684,10 +679,13 @@ tquant-agent/
 
 ---
 
-### 第 3 步：配置文件
+### 第 3 步：配置文件（概念示例）
+
+> 下方是最初设计阶段的**概念示例配置结构**，便于理解系统要素；  
+> 实际项目中已经采用基于 Pydantic 的配置系统，完整示例请参考当前仓库中的 `tquant/config/config.yaml` 与 `tquant/config/schema.py`。
 
 ```yaml
-# config.yaml
+# 概念版 config.yaml（示意）
 
 # 系统配置
 system:
@@ -741,12 +739,19 @@ trigger:
 ### 第 4 步：连接 tqsdk
 
 ```python
-# utils/tqsdk_interface.py
+# utils/tqsdk_interface.py（概念示例）
+#
+# 当前项目中已经有更完善的基于配置的实现：
+#  - 实际代码位置: tquant/utils/tqsdk_interface.py
+#  - 通过 Config / config.yaml 控制 auth、回测区间、模拟/实盘模式等
+#
+# 下方代码保留为最小示例，便于理解 tqsdk 最基础的用法。
 
 from tqsdk import TqApi, TqAuth
 import logging
 
 logger = logging.getLogger(__name__)
+
 
 class TqSDKInterface:
     def __init__(self, account, password):
@@ -759,9 +764,8 @@ class TqSDKInterface:
 
     def place_order(self, symbol, direction, volume, price_type='limit', price=None):
         """下报单"""
-        order = TqOrd(self.api, symbol, direction, volume)
-        if price:
-            order.wait_update()
+        # 注意：当前项目的实际下单逻辑请参考 tquant/utils/tqsdk_interface.py 中的 place_order 实现
+        order = None
         return order
 
     def close(self):

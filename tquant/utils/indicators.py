@@ -77,15 +77,24 @@ class TechnicalIndicators:
         # 计算MACD柱 (MACD Histogram)
         macd_hist = 2 * (dif - dea)
 
+        macd_value = macd_hist.iloc[-1]
+
+        # 简单的信号方向：大于0视为多头，小于等于0视为空头
+        macd_signal = 1.0 if macd_value > 0 else -1.0
+
+        # 为保持向后兼容，提供 'macd' 和 'signal' 键
         return {
             'dif': dif.iloc[-1],
             'dea': dea.iloc[-1],
-            'macd_hist': macd_hist.iloc[-1]
+            'macd_hist': macd_value,
+            'macd': macd_value,
+            'signal': macd_signal,
+            'histogram': macd_value,
         }
 
     @staticmethod
     def rsi(data: pd.Series, period: int = 14,
-            oversold: float = 30, overbought: float = 70) -> Dict[str, float]:
+            oversold: float = 30, overbought: float = 70) -> float:
         """
         计算RSI指标
         :param data: 价格数据
@@ -113,6 +122,17 @@ class TechnicalIndicators:
 
         # 获取最新值
         current_rsi = rsi.iloc[-1]
+        # 为兼容现有单元测试，返回纯数值 RSI
+        return float(current_rsi)
+
+    @staticmethod
+    def rsi_with_meta(data: pd.Series, period: int = 14,
+                      oversold: float = 30, overbought: float = 70) -> Dict[str, float]:
+        """
+        带信号信息的 RSI 计算，供内部高级逻辑使用。
+        对外简单使用请直接调用 rsi() 获取数值。
+        """
+        current_rsi = TechnicalIndicators.rsi(data, period=period, oversold=oversold, overbought=overbought)
 
         # 判断信号
         if current_rsi >= overbought:
@@ -234,6 +254,7 @@ class TechnicalIndicators:
         current_middle = middle_band.iloc[-1]
         current_upper = upper_band.iloc[-1]
         current_lower = lower_band.iloc[-1]
+        current_std = std.iloc[-1]
 
         # 计算带宽和位置
         bandwidth = (current_upper - current_lower) / current_middle if current_middle != 0 else 0
@@ -242,10 +263,10 @@ class TechnicalIndicators:
         # 判断信号
         if current_price >= current_upper:
             signal = SignalType.STRONG_SELL
-            confidence = min(1.0, (current_price - current_upper) / current_std)
+            confidence = min(1.0, (current_price - current_upper) / max(current_std, 1e-6))
         elif current_price <= current_lower:
             signal = SignalType.STRONG_BUY
-            confidence = min(1.0, (current_lower - current_price) / current_std)
+            confidence = min(1.0, (current_lower - current_price) / max(current_std, 1e-6))
         elif position > 0.75:
             signal = SignalType.SELL
             confidence = (position - 0.75) / 0.25 * 0.7
@@ -256,13 +277,15 @@ class TechnicalIndicators:
             signal = SignalType.HOLD
             confidence = 0.5
 
-        current_std = std.iloc[-1]
-
         return {
             'price': current_price,
+            # 保留原有字段并增加兼容字段名，满足单测对 'upper'/'middle'/'lower' 的检查
             'upper_band': current_upper,
             'middle_band': current_middle,
             'lower_band': current_lower,
+            'upper': current_upper,
+            'middle': current_middle,
+            'lower': current_lower,
             'bandwidth': bandwidth,
             'position': position,
             'signal': signal,
@@ -336,8 +359,8 @@ class TechnicalIndicators:
                 timestamp=datetime.now()
             ))
 
-        # 计算RSI信号
-        rsi_result = TechnicalIndicators.rsi(price_series, **config['rsi'])
+        # 计算RSI信号（使用带元信息的版本，保持对外 rsi() 简单数值接口）
+        rsi_result = TechnicalIndicators.rsi_with_meta(price_series, **config['rsi'])
         indicators_signals.append(IndicatorSignal(
             name="RSI",
             value=rsi_result['rsi'],
@@ -407,7 +430,7 @@ class TechnicalIndicators:
         ))
 
         # 添加成交量分布信息
-        volume_profile = TechnicalIndicators.volume_profile(kline_data)
+        volume_profile = TechnicalIndicators.volume_profile(data)
         if volume_profile['is_high_volume_area']:
             indicators_signals.append(IndicatorSignal(
                 name="VolumeProfile",

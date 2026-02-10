@@ -381,12 +381,27 @@ class DebaterAgent:
         decision = debate_state.moderator_decision.get('decision', 'HOLD')
         confidence = debate_state.moderator_decision.get('confidence', 0.5)
 
-        # 映射决策到信号类型
-        signal_type = self._map_decision_to_signal_type(decision)
+        # 映射决策到信号类型，保持与初始信号的枚举类型一致
+        SignalTypeEnum = debate_state.initial_signal.signal_type.__class__
+        mapped_signal_type = self._map_decision_to_signal_type(decision)
+        # 使用相同名称从初始信号的枚举类型中取值，避免不同导入路径导致的不等问题
+        try:
+            signal_type = SignalTypeEnum[mapped_signal_type.name]
+        except Exception:
+            signal_type = mapped_signal_type
+
+        # 使用初始信号的 Direction 枚举类型，避免因不同导入路径导致的枚举实例不等问题
+        DirectionEnum = debate_state.initial_signal.direction.__class__
+        if decision == "买入":
+            direction = DirectionEnum.LONG
+        elif decision == "卖出":
+            direction = DirectionEnum.SHORT
+        else:
+            direction = DirectionEnum.NEUTRAL
 
         return TradingSignal(
             symbol=debate_state.symbol,
-            direction=Direction.LONG if decision == "买入" else Direction.SHORT if decision == "卖出" else Direction.NEUTRAL,
+            direction=direction,
             signal_type=signal_type,
             confidence=confidence,
             indicators=debate_state.initial_signal.indicators,
